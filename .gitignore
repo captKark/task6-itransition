@@ -1,0 +1,10 @@
+# node_modules anywhere in the project
+node_modules/
+
+# Local environment files containing secrets
+.env
+.env.local
+.env.development.local
+
+# Build outputs
+dist/
