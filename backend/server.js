@@ -80,8 +80,69 @@ app.post('/api/users/login', async (req, res) => {
 io.on('connection', (socket) => {
   console.log(`⚡ A user connected: ${socket.id}`);
 
-  socket.on('join_lobby', (data) => {
+  // Helper function
+  const broadcastOpenLobbies = async () => {
+    try {
+      const queryText = `
+        SELECT g.room_id, g.grid_size, g.ship_configuration, u.display_name as creator_name
+        FROM battleship_game_sessions g
+        JOIN battleship_users u ON g.creator_id = u.id
+        WHERE g.status = 'waiting'
+        ORDER BY g.created_at DESC
+      `;
+      const result = await db.query(queryText);
+      io.emit('lobby_list_updated', result.rows);
+    } catch (err) {
+      console.error("Error fetching lobby list:", err);
+    }
+  };
+
+  socket.on('join_lobby', async (data) => {
     console.log(`⚓ Player ${data.playerName} has entered the Matchmaking Lounge.`);
+    await broadcastOpenLobbies();
+  });
+
+  socket.on('create_room', async (data) => {
+    const { sessionToken, gridSize, shipConfiguration } = data;
+
+    try {
+      const userResult = await db.query(
+        'SELECT id FROM battleship_users WHERE session_token = $1', 
+        [sessionToken]
+      );
+
+      if (userResult.rows.length === 0) {
+        return socket.emit('error_message', { message: 'Authentication invalid.' });
+      }
+
+      const creatorId = userResult.rows[0].id;
+
+      // Insert the new game session with custom rule inputs into PostgreSQL
+      const insertQuery = `
+        INSERT INTO battleship_game_sessions (creator_id, grid_size, ship_configuration, status)
+        VALUES ($1, $2, $3, 'waiting')
+        RETURNING room_id
+      `;
+      const gameResult = await db.query(insertQuery, [
+        creatorId, 
+        gridSize || 10, 
+        JSON.stringify(shipConfiguration || [])
+      ]);
+
+      const newRoomId = gameResult.rows[0].room_id;
+      console.log(`🎲 Game Room Created: ${newRoomId} (Grid: ${gridSize}x${gridSize})`);
+
+      // Let the creator join this specific private Socket.io room channel
+      socket.join(newRoomId);
+      socket.emit('room_created', { roomId: newRoomId });
+
+      // Trigger live, real-time update to everyone else looking at the lobby list
+      await broadcastOpenLobbies();
+
+    } catch (err) {
+      console.error("Failed to initialize game room:", err);
+      socket.emit('error_message', { message: 'Database failure creating room.' });
+    }
   });
 
   socket.on('disconnect', () => {

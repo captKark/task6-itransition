@@ -1,8 +1,7 @@
-// frontend/src/App.jsx
 import { useState, useEffect, useRef } from 'react';
-import { Container, Row, Col, Card, Form, Button, Alert } from 'react-bootstrap';
+import { Container, Row, Col, Card, Form, Button, Alert, Table, Badge } from 'react-bootstrap';
 import axios from 'axios';
-import { io } from 'socket.io-client'; // Import the client socket engine
+import { io } from 'socket.io-client';
 import 'bootstrap/dist/css/bootstrap.min.css';
 
 function App() {
@@ -11,8 +10,11 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
-  const socketRef = useRef(null);
+  const [lobbies, setLobbies] = useState([]);
+  const [currentRoom, setCurrentRoom] = useState(null);
+  const [gridSize, setGridSize] = useState(10);
 
+  const socketRef = useRef(null);
   const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
   useEffect(() => {
@@ -21,15 +23,27 @@ function App() {
 
       socketRef.current.emit('join_lobby', { playerName: userSession.name });
 
+      socketRef.current.on('lobby_list_updated', (updatedLobbies) => {
+        setLobbies(updatedLobbies);
+      });
+
+      socketRef.current.on('room_created', (data) => {
+        setCurrentRoom(data.roomId);
+      });
+
+      socketRef.current.on('error_message', (data) => {
+        setErrorMessage(data.message);
+      });
+
       return () => {
         if (socketRef.current) {
           socketRef.current.disconnect();
-          console.log('🔌 Disconnected from websocket pipeline safely.');
         }
       };
     }
   }, [userSession, API_URL]);
 
+  // Check if a player session already exists when application loads
   useEffect(() => {
     const savedToken = localStorage.getItem('battleship_session');
     const savedName = localStorage.getItem('battleship_name');
@@ -63,30 +77,160 @@ function App() {
     }
   };
 
+  const handleCreateRoom = (e) => {
+    e.preventDefault();
+    if (!socketRef.current || !userSession) return;
+
+    const standardShips = [
+      { type: 'Carrier', size: 5, count: 1 },
+      { type: 'Battleship', size: 4, count: 1 },
+      { type: 'Destroyer', size: 3, count: 2 },
+      { type: 'Patrol Boat', size: 2, count: 1 }
+    ];
+
+    // Emit event up to the server engine
+    socketRef.current.emit('create_room', {
+      sessionToken: userSession.token,
+      gridSize: parseInt(gridSize, 10),
+      shipConfiguration: standardShips
+    });
+  };
+
   const handleLogout = () => {
     localStorage.clear();
     setUserSession(null);
     setUsernameInput('');
+    setCurrentRoom(null);
+    setLobbies([]);
   };
 
   if (userSession) {
     return (
-      <Container className="py-5 text-center">
-        <Row className="justify-content-center">
-          <Col md={6}>
-            <h1 className="display-5 mb-3 fw-bold text-dark">⚓ Battleship Fleet Command</h1>
-            <p className="text-muted mb-4">Welcome back, <span className="fw-bold text-primary">{userSession.name}</span></p>
-            <Card className="border-0 shadow-sm p-4 bg-light text-start mb-4">
-              <Card.Body>
-                <h5 className="fw-bold">Matchmaking Lounge</h5>
-                <p className="text-muted small">Real-time socket line is now established. You can view connections in your backend console log output stream terminal.</p>
-              </Card.Body>
-            </Card>
-            <Button variant="outline-danger" size="sm" onClick={handleLogout}>
-              Change Identity
+      <Container className="py-5">
+        <Row className="mb-4 align-items-center">
+          <Col>
+            <h2 className="fw-bold text-dark mb-1">⚓ Fleet Command Lounge</h2>
+            <p className="text-muted small mb-0">
+              Authenticated as: <span className="fw-semibold text-primary">{userSession.name}</span>
+            </p>
+          </Col>
+          <Col className="text-end">
+            <Button variant="outline-secondary" size="sm" onClick={handleLogout}>
+              Disconnect Session
             </Button>
           </Col>
         </Row>
+
+        {errorMessage && <Alert variant="danger" className="py-2 small mb-4">{errorMessage}</Alert>}
+
+        {currentRoom ? (
+          <Row className="justify-content-center">
+            <Col md={8}>
+              <Card className="border-primary shadow-sm text-center p-5 bg-white">
+                <Card.Body>
+                  <div className="spinner-border text-primary mb-3" role="status"></div>
+                  <h4 className="fw-bold text-dark">Waiting for an Opponent</h4>
+                  <p className="text-muted small mb-4">
+                    Your match session has been broadcasted to the lounge network.
+                  </p>
+                  <div className="bg-light p-3 rounded mb-4 text-start font-monospace small border">
+                    <strong>ROOM ID:</strong> {currentRoom}
+                  </div>
+                  <Button variant="outline-danger" size="sm" onClick={() => setCurrentRoom(null)}>
+                    Cancel Matchmaking
+                  </Button>
+                </Card.Body>
+              </Card>
+            </Col>
+          </Row>
+        ) : (
+          <Row className="g-4">
+            {/* Left Column: Create Custom Session Form */}
+            <Col lg={4}>
+              <Card className="border shadow-sm p-3 bg-white">
+                <Card.Body>
+                  <h5 className="fw-bold text-dark mb-3">Host New Game</h5>
+                  <Form onSubmit={handleCreateRoom}>
+                    <Form.Group className="mb-4">
+                      <Form.Label className="small fw-semibold text-secondary">Grid Dimension</Form.Label>
+                      <Form.Select 
+                        value={gridSize} 
+                        onChange={(e) => setGridSize(e.target.value)}
+                        className="border-secondary-subtle"
+                      >
+                        <option value={10}>10 x 10 (Standard)</option>
+                        <option value={12}>12 x 12 (Large)</option>
+                        <option value={15}>15 x 15 (Warzone)</option>
+                      </Form.Select>
+                    </Form.Group>
+
+                    <div className="mb-4">
+                      <Form.Label className="small fw-semibold text-secondary d-block mb-2">Fleet Layout (Standard)</Form.Label>
+                      <div className="bg-light p-2 rounded border small text-muted">
+                        • 1x Carrier (5 slots)<br />
+                        • 1x Battleship (4 slots)<br />
+                        • 2x Destroyer (3 slots)<br />
+                        • 1x Patrol Boat (2 slots)
+                      </div>
+                    </div>
+
+                    <Button variant="primary" type="submit" className="w-100 py-2 fw-semibold">
+                      Broadcast Open Room
+                    </Button>
+                  </Form>
+                </Card.Body>
+              </Card>
+            </Col>
+
+            {/* Right Column: Real-Time Open Lobbies List */}
+            <Col lg={8}>
+              <Card className="border shadow-sm p-3 bg-white h-100">
+                <Card.Body>
+                  <h5 className="fw-bold text-dark mb-3">Active Engagements Channel</h5>
+                  
+                  {lobbies.length === 0 ? (
+                    <div className="text-center py-5 border rounded bg-light text-muted small">
+                      No open rooms found. Use the configuration panel to host a new session.
+                    </div>
+                  ) : (
+                    <div className="table-responsive">
+                      <Table hover className="align-middle border-top-0 mb-0">
+                        <thead>
+                          <tr className="text-secondary small uppercase">
+                            <th>Host Captain</th>
+                            <th>Grid Size</th>
+                            <th>Status</th>
+                            <th className="text-end">Action</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {lobbies.map((room) => (
+                            <tr key={room.room_id}>
+                              <td className="fw-semibold text-dark">{room.creator_name}</td>
+                              <td>
+                                <Badge bg="secondary" className="fw-normal">
+                                  {room.grid_size} x {room.grid_size}
+                                </Badge>
+                              </td>
+                              <td>
+                                <Badge bg="success" className="px-2 py-1 fw-normal">Waiting</Badge>
+                              </td>
+                              <td className="text-end">
+                                <Button variant="outline-primary" size="sm" className="px-3 fw-medium">
+                                  Join Engagement
+                                </Button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </Table>
+                    </div>
+                  )}
+                </Card.Body>
+              </Card>
+            </Col>
+          </Row>
+        )}
       </Container>
     );
   }
