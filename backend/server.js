@@ -47,7 +47,7 @@ app.post('/api/users/login', async (req, res) => {
   const baseName = username.trim();
 
   try {
-    const countQuery = 'SELECT COUNT(*) FROM users WHERE base_name = $1';
+    const countQuery = 'SELECT COUNT(*) FROM battleship_users WHERE base_name = $1';
     const countResult = await db.query(countQuery, [baseName]);
     const existingCount = parseInt(countResult.rows[0].count, 10);
 
@@ -57,7 +57,7 @@ app.post('/api/users/login', async (req, res) => {
     }
 
     const insertQuery = `
-      INSERT INTO users (base_name, display_name) 
+      INSERT INTO battleship_users (base_name, display_name) 
       VALUES ($1, $2) 
       RETURNING session_token, display_name
     `;
