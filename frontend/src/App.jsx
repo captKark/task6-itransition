@@ -29,6 +29,11 @@ function App() {
   const [activeGridSize, setActiveGridSize] = useState(10);
   const [activeShipConfig, setActiveShipConfig] = useState([]);
 
+  const [placedShips, setPlacedShips] = useState({});
+  const [selectedShipType, setSelectedShipType] = useState("Carrier");
+  const [placementOrientation, setPlacementOrientation] = useState("H");
+  const [readyToBattle, setReadyToBattle] = useState(false);
+
   const socketRef = useRef(null);
   const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
@@ -131,18 +136,66 @@ function App() {
     setUsernameInput("");
     setCurrentRoom(null);
     setLobbies([]);
-    setIsMatchActive(false); // Reset
+    setIsMatchActive(false); 
   };
 
   if (userSession) {
     // STATE 1: GAME BOARD IS RUNNING LIVED
-    // 1. IF MATCH IS ACTIVE -> RENDER DYNAMIC SHIPS MATRIX GRID
+    // IF MATCH IS ACTIVE -> RENDER DYNAMIC SHIPS MATRIX GRID WITH PLACEMENT CONTROLS
     if (currentRoom && isMatchActive) {
-      // Helper function to build coordinate layout ranges dynamically (e.g., [0, 1, 2, ..., N-1])
       const gridRange = Array.from({ length: activeGridSize }, (_, i) => i);
-
-      // Suffix standard alphabet labels for row identification coordinates
       const rowLabels = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
+
+      const handleCellClickDefensive = (row, col) => {
+        if (readyToBattle) return; 
+
+        const shipDetails = activeShipConfig.find(
+          (s) => s.type === selectedShipType,
+        ) || { size: 3 };
+        const shipSize = shipDetails.size;
+
+        const newPlacements = { ...placedShips };
+        const coordinatesToOccupy = [];
+
+        // Calculate and validate the geometric span of cells
+        for (let i = 0; i < shipSize; i++) {
+          const targetRow = placementOrientation === "V" ? row + i : row;
+          const targetCol = placementOrientation === "H" ? col + i : col;
+
+          // Bound Check: Ensure  ship doesn't hang off the edge of the board size
+          if (targetRow >= activeGridSize || targetCol >= activeGridSize) {
+            alert("🚨 Collision Alert: Operation falls off grid boundaries!");
+            return;
+          }
+
+          const cellKey = `${targetRow}-${targetCol}`;
+
+          // Overlap Check: Ensure  spot isn't already taken by another ship type
+          if (
+            newPlacements[cellKey] &&
+            newPlacements[cellKey].shipType !== selectedShipType
+          ) {
+            alert(
+              "💥 Collision Alert: Overlapping with an existing deployed hull!",
+            );
+            return;
+          }
+
+          coordinatesToOccupy.push(cellKey);
+        }
+
+        Object.keys(newPlacements).forEach((key) => {
+          if (newPlacements[key].shipType === selectedShipType) {
+            delete newPlacements[key];
+          }
+        });
+
+        coordinatesToOccupy.forEach((key) => {
+          newPlacements[key] = { shipType: selectedShipType };
+        });
+
+        setPlacedShips(newPlacements);
+      };
 
       return (
         <Container className="py-4">
@@ -154,9 +207,9 @@ function App() {
               </h4>
               <p className="text-secondary small mb-0 font-monospace">
                 Sector ID: <span className="text-white">{currentRoom}</span> |
-                Grid Dimensions:{" "}
+                Grid:{" "}
                 <span className="text-warning">
-                  {activeGridSize} x {activeGridSize}
+                  {activeGridSize}x{activeGridSize}
                 </span>
               </p>
             </Col>
@@ -167,6 +220,8 @@ function App() {
                 onClick={() => {
                   setCurrentRoom(null);
                   setIsMatchActive(false);
+                  setPlacedShips({});
+                  setReadyToBattle(false);
                 }}
               >
                 Retreat to Lounge
@@ -174,22 +229,83 @@ function App() {
             </Col>
           </Row>
 
+          {/* Control Panel Block: Displayed during the ship arrangement phase */}
+          {!readyToBattle && (
+            <Card className="border border-warning shadow-sm p-3 mb-4 bg-light mx-1">
+              <Card.Body className="d-flex flex-wrap align-items-center justify-content-between gap-3 p-1">
+                <div>
+                  <h6 className="fw-bold text-dark mb-1">
+                    🛠️ Fleet Deployment Control Mode
+                  </h6>
+                  <p className="text-muted small mb-0">
+                    Select a ship configuration from your manifest, choose
+                    alignment, then click your grid.
+                  </p>
+                </div>
+                <div className="d-flex flex-wrap gap-2 align-items-center">
+                  {/* Select target ship class */}
+                  <Form.Select
+                    size="sm"
+                    style={{ width: "160px" }}
+                    value={selectedShipType}
+                    onChange={(e) => setSelectedShipType(e.target.value)}
+                  >
+                    {activeShipConfig.map((s) => (
+                      <option key={s.type} value={s.type}>
+                        {s.type} ({s.size} slots)
+                      </option>
+                    ))}
+                  </Form.Select>
+
+                  {/* Toggle vector layout direction */}
+                  <Button
+                    variant={
+                      placementOrientation === "H" ? "primary" : "secondary"
+                    }
+                    size="sm"
+                    onClick={() => setPlacementOrientation("H")}
+                  >
+                    Horizontal (↔)
+                  </Button>
+                  <Button
+                    variant={
+                      placementOrientation === "V" ? "primary" : "secondary"
+                    }
+                    size="sm"
+                    onClick={() => setPlacementOrientation("V")}
+                  >
+                    Vertical (↕)
+                  </Button>
+
+                  <Button
+                    variant="success"
+                    size="sm"
+                    className="px-3 fw-bold"
+                    onClick={() => setReadyToBattle(true)}
+                  >
+                    Lock Coordinates ⚓
+                  </Button>
+                </div>
+              </Card.Body>
+            </Card>
+          )}
+
           <Row className="g-4 justify-content-center">
             {/* LEFT COLUMN: PRIMARY FLEET COMMAND (DEFENSIVE FIELD) */}
             <Col xl={6} className="text-center">
               <Card className="border border-secondary shadow-sm p-3 bg-white">
                 <h6 className="fw-bold text-secondary text-uppercase tracking-wider mb-3">
-                  🛡️ Your Fleet Grid
+                  🛡️ Your Fleet Grid{" "}
+                  {readyToBattle && <Badge bg="success">Manned</Badge>}
                 </h6>
 
                 <div className="d-inline-block p-2 bg-light rounded border mx-auto">
-                  {/* Dynamic Matrix Column Headers */}
+                  {/* Grid Column Headers */}
                   <div className="d-flex align-items-center justify-content-center mb-1">
                     <div
                       style={{ width: "24px", height: "24px" }}
                       className="me-1"
-                    ></div>{" "}
-                    {/* Spacer for alignment */}
+                    ></div>
                     {gridRange.map((col) => (
                       <div
                         key={`my-col-${col}`}
@@ -205,13 +321,12 @@ function App() {
                     ))}
                   </div>
 
-                  {/* Dynamic Matrix Rows */}
+                  {/* Grid Rows */}
                   {gridRange.map((row) => (
                     <div
                       key={`my-row-${row}`}
                       className="d-flex align-items-center justify-content-center mb-1"
                     >
-                      {/* Row Alphabet Index Label */}
                       <div
                         className="font-monospace small fw-bold text-muted text-center me-1"
                         style={{
@@ -223,24 +338,37 @@ function App() {
                         {rowLabels[row] || row}
                       </div>
 
-                      {/* Operational Coordinate Target Cells */}
-                      {gridRange.map((col) => (
-                        <button
-                          key={`cell-mine-${row}-${col}`}
-                          className="border rounded bg-white me-1 transition-all d-block p-0"
-                          style={{
-                            width: "28px",
-                            height: "28px",
-                            fontSize: "10px",
-                          }}
-                          onClick={() =>
-                            console.log(
-                              `My Fleet Grid Cell Selected: ${rowLabels[row]}${col + 1}`,
-                            )
-                          }
-                          title={`Coordinate: ${rowLabels[row]}${col + 1}`}
-                        />
-                      ))}
+                      {gridRange.map((col) => {
+                        const cellKey = `${row}-${col}`;
+                        const hasShip = placedShips[cellKey];
+
+                        let cellBg = "bg-white";
+                        if (hasShip) {
+                          if (hasShip.shipType === "Carrier")
+                            cellBg = "bg-dark text-white";
+                          else if (hasShip.shipType === "Battleship")
+                            cellBg = "bg-secondary text-white";
+                          else cellBg = "bg-info text-dark";
+                        }
+
+                        return (
+                          <button
+                            key={`cell-mine-${row}-${col}`}
+                            className={`border rounded me-1 transition-all d-block p-0 ${cellBg}`}
+                            style={{
+                              width: "28px",
+                              height: "28px",
+                              fontSize: "9px",
+                              fontWeight: "bold",
+                            }}
+                            onClick={() => handleCellClickDefensive(row, col)}
+                            disabled={readyToBattle}
+                            title={`Coordinate: ${rowLabels[row]}${col + 1}`}
+                          >
+                            {hasShip ? hasShip.shipType[0] : ""}
+                          </button>
+                        );
+                      })}
                     </div>
                   ))}
                 </div>
@@ -255,7 +383,6 @@ function App() {
                 </h6>
 
                 <div className="d-inline-block p-2 bg-light rounded border mx-auto">
-                  {/* Dynamic Matrix Column Headers */}
                   <div className="d-flex align-items-center justify-content-center mb-1">
                     <div
                       style={{ width: "24px", height: "24px" }}
@@ -276,13 +403,11 @@ function App() {
                     ))}
                   </div>
 
-                  {/* Dynamic Matrix Rows */}
                   {gridRange.map((row) => (
                     <div
                       key={`target-row-${row}`}
                       className="d-flex align-items-center justify-content-center mb-1"
                     >
-                      {/* Row Alphabet Index Label */}
                       <div
                         className="font-monospace small fw-bold text-muted text-center me-1"
                         style={{
@@ -294,7 +419,6 @@ function App() {
                         {rowLabels[row] || row}
                       </div>
 
-                      {/* Fire Control Targeting Cells */}
                       {gridRange.map((col) => (
                         <button
                           key={`cell-target-${row}-${col}`}
@@ -302,8 +426,9 @@ function App() {
                           style={{
                             width: "28px",
                             height: "28px",
-                            cursor: "crosshair",
+                            cursor: readyToBattle ? "crosshair" : "not-allowed",
                           }}
+                          disabled={!readyToBattle}
                           onClick={() =>
                             alert(
                               `Target locked! Firing coordinate stream at: ${rowLabels[row]}${col + 1}`,
