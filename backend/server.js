@@ -117,7 +117,6 @@ io.on('connection', (socket) => {
 
       const creatorId = userResult.rows[0].id;
 
-      // Insert the new game session with custom rule inputs into PostgreSQL
       const insertQuery = `
         INSERT INTO battleship_game_sessions (creator_id, grid_size, ship_configuration, status)
         VALUES ($1, $2, $3, 'waiting')
@@ -136,7 +135,6 @@ io.on('connection', (socket) => {
       socket.join(newRoomId);
       socket.emit('room_created', { roomId: newRoomId });
 
-      // Trigger live, real-time update to everyone else looking at the lobby list
       await broadcastOpenLobbies();
 
     } catch (err) {
@@ -149,7 +147,6 @@ io.on('connection', (socket) => {
     const { sessionToken, roomId } = data;
 
     try {
-      // Authenticate the incoming player
       const userResult = await db.query(
         'SELECT id, display_name FROM battleship_users WHERE session_token = $1',
         [sessionToken]
@@ -180,7 +177,7 @@ io.on('connection', (socket) => {
         return socket.emit('error_message', { message: 'You cannot join your own match.' });
       }
 
-      // Update the database: fill opponent slot and mark the room as active
+      // Update the database
       await db.query(
         `UPDATE battleship_game_sessions 
          SET opponent_id = $1, status = 'active' 
@@ -191,15 +188,20 @@ io.on('connection', (socket) => {
       // Join the websocket channel
       socket.join(roomId);
 
-      // Broadcast an initialization trigger to BOTH players in this room
+      const matchDetails = await db.query(
+        'SELECT grid_size, ship_configuration FROM battleship_game_sessions WHERE room_id = $1',
+        [roomId]
+      );
+
       io.to(roomId).emit('match_started', {
         roomId: roomId,
+        gridSize: matchDetails.rows[0].grid_size,
+        shipConfiguration: matchDetails.rows[0].ship_configuration,
         message: `Match initiated! Battle stations ready.`
       });
 
       console.log(`⚔️ Match Started: Room ${roomId} is now ACTIVE.`);
 
-      // Update the lounge lobby listing for everyone else online
       await broadcastOpenLobbies();
 
     } catch (err) {

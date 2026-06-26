@@ -26,6 +26,9 @@ function App() {
   const [gridSize, setGridSize] = useState(10);
   const [isMatchActive, setIsMatchActive] = useState(false);
 
+  const [activeGridSize, setActiveGridSize] = useState(10);
+  const [activeShipConfig, setActiveShipConfig] = useState([]);
+
   const socketRef = useRef(null);
   const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
@@ -45,11 +48,9 @@ function App() {
 
       socketRef.current.on("match_started", (data) => {
         setCurrentRoom(data.roomId);
-        setIsMatchActive(true); // Switch view mode to active game field
-      });
-
-      socketRef.current.on("error_message", (data) => {
-        setErrorMessage(data.message);
+        setActiveGridSize(data.gridSize);
+        setActiveShipConfig(data.shipConfiguration);
+        setIsMatchActive(true); 
       });
 
       return () => {
@@ -60,7 +61,7 @@ function App() {
     }
   }, [userSession, API_URL]);
 
-  // Check if a player session already exists when application loads
+  // Check if a player session already exists
   useEffect(() => {
     const savedToken = localStorage.getItem("battleship_session");
     const savedName = localStorage.getItem("battleship_name");
