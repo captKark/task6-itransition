@@ -145,6 +145,69 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('join_room', async (data) => {
+    const { sessionToken, roomId } = data;
+
+    try {
+      // Authenticate the incoming player
+      const userResult = await db.query(
+        'SELECT id, display_name FROM battleship_users WHERE session_token = $1',
+        [sessionToken]
+      );
+
+      if (userResult.rows.length === 0) {
+        return socket.emit('error_message', { message: 'Authentication invalid.' });
+      }
+
+      const opponentId = userResult.rows[0].id;
+      const opponentName = userResult.rows[0].display_name;
+
+      // Check if the game room is still open
+      const roomCheck = await db.query(
+        'SELECT creator_id, status FROM battleship_game_sessions WHERE room_id = $1',
+        [roomId]
+      );
+
+      if (roomCheck.rows.length === 0) {
+        return socket.emit('error_message', { message: 'Game session not found.' });
+      }
+
+      if (roomCheck.rows[0].status !== 'waiting') {
+        return socket.emit('error_message', { message: 'Game room is already full or closed.' });
+      }
+
+      if (roomCheck.rows[0].creator_id === opponentId) {
+        return socket.emit('error_message', { message: 'You cannot join your own match.' });
+      }
+
+      // Update the database: fill opponent slot and mark the room as active
+      await db.query(
+        `UPDATE battleship_game_sessions 
+         SET opponent_id = $1, status = 'active' 
+         WHERE room_id = $2`,
+        [opponentId, roomId]
+      );
+
+      // Join the websocket channel
+      socket.join(roomId);
+
+      // Broadcast an initialization trigger to BOTH players in this room
+      io.to(roomId).emit('match_started', {
+        roomId: roomId,
+        message: `Match initiated! Battle stations ready.`
+      });
+
+      console.log(`⚔️ Match Started: Room ${roomId} is now ACTIVE.`);
+
+      // Update the lounge lobby listing for everyone else online
+      await broadcastOpenLobbies();
+
+    } catch (err) {
+      console.error("Match link failure:", err);
+      socket.emit('error_message', { message: 'Database error linking match session.' });
+    }
+  });
+
   socket.on('disconnect', () => {
     console.log(`❌ User disconnected: ${socket.id}`);
   });
