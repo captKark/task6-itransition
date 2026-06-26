@@ -50,7 +50,7 @@ function App() {
         setCurrentRoom(data.roomId);
         setActiveGridSize(data.gridSize);
         setActiveShipConfig(data.shipConfiguration);
-        setIsMatchActive(true); 
+        setIsMatchActive(true);
       });
 
       return () => {
@@ -136,19 +136,188 @@ function App() {
 
   if (userSession) {
     // STATE 1: GAME BOARD IS RUNNING LIVED
+    // 1. IF MATCH IS ACTIVE -> RENDER DYNAMIC SHIPS MATRIX GRID
     if (currentRoom && isMatchActive) {
+      // Helper function to build coordinate layout ranges dynamically (e.g., [0, 1, 2, ..., N-1])
+      const gridRange = Array.from({ length: activeGridSize }, (_, i) => i);
+
+      // Suffix standard alphabet labels for row identification coordinates
+      const rowLabels = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
+
       return (
-        <Container className="py-5 text-center">
-          <h2 className="fw-bold text-dark mb-1">🎯 Tactical Combat Grid</h2>
-          <p className="text-muted small mb-4 font-monospace">
-            Room Cluster ID: {currentRoom}
-          </p>
-          <div className="p-5 bg-dark text-white rounded shadow-sm">
-            <h4>[ Battleship Battle Board Component Will Load Here ]</h4>
-            <p className="text-secondary small mb-0">
-              Prepare to deploy your fleet.
-            </p>
-          </div>
+        <Container className="py-4">
+          {/* Upper Tactical Status Banner */}
+          <Row className="mb-4 align-items-center bg-dark text-light p-3 rounded shadow-sm mx-1">
+            <Col md={8}>
+              <h4 className="fw-bold mb-1 text-primary">
+                ⚡ ENGAGEMENT ZONE ACTIVE
+              </h4>
+              <p className="text-secondary small mb-0 font-monospace">
+                Sector ID: <span className="text-white">{currentRoom}</span> |
+                Grid Dimensions:{" "}
+                <span className="text-warning">
+                  {activeGridSize} x {activeGridSize}
+                </span>
+              </p>
+            </Col>
+            <Col md={4} className="text-md-end mt-2 mt-md-0">
+              <Button
+                variant="outline-warning"
+                size="sm"
+                onClick={() => {
+                  setCurrentRoom(null);
+                  setIsMatchActive(false);
+                }}
+              >
+                Retreat to Lounge
+              </Button>
+            </Col>
+          </Row>
+
+          <Row className="g-4 justify-content-center">
+            {/* LEFT COLUMN: PRIMARY FLEET COMMAND (DEFENSIVE FIELD) */}
+            <Col xl={6} className="text-center">
+              <Card className="border border-secondary shadow-sm p-3 bg-white">
+                <h6 className="fw-bold text-secondary text-uppercase tracking-wider mb-3">
+                  🛡️ Your Fleet Grid
+                </h6>
+
+                <div className="d-inline-block p-2 bg-light rounded border mx-auto">
+                  {/* Dynamic Matrix Column Headers */}
+                  <div className="d-flex align-items-center justify-content-center mb-1">
+                    <div
+                      style={{ width: "24px", height: "24px" }}
+                      className="me-1"
+                    ></div>{" "}
+                    {/* Spacer for alignment */}
+                    {gridRange.map((col) => (
+                      <div
+                        key={`my-col-${col}`}
+                        className="text-center font-monospace small fw-bold text-muted"
+                        style={{
+                          width: "28px",
+                          height: "28px",
+                          lineHeight: "28px",
+                        }}
+                      >
+                        {col + 1}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Dynamic Matrix Rows */}
+                  {gridRange.map((row) => (
+                    <div
+                      key={`my-row-${row}`}
+                      className="d-flex align-items-center justify-content-center mb-1"
+                    >
+                      {/* Row Alphabet Index Label */}
+                      <div
+                        className="font-monospace small fw-bold text-muted text-center me-1"
+                        style={{
+                          width: "24px",
+                          height: "28px",
+                          lineHeight: "28px",
+                        }}
+                      >
+                        {rowLabels[row] || row}
+                      </div>
+
+                      {/* Operational Coordinate Target Cells */}
+                      {gridRange.map((col) => (
+                        <button
+                          key={`cell-mine-${row}-${col}`}
+                          className="border rounded bg-white me-1 transition-all d-block p-0"
+                          style={{
+                            width: "28px",
+                            height: "28px",
+                            fontSize: "10px",
+                          }}
+                          onClick={() =>
+                            console.log(
+                              `My Fleet Grid Cell Selected: ${rowLabels[row]}${col + 1}`,
+                            )
+                          }
+                          title={`Coordinate: ${rowLabels[row]}${col + 1}`}
+                        />
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            </Col>
+
+            {/* RIGHT COLUMN: TARGET TRACKING MATRIX (OFFENSIVE FIELD) */}
+            <Col xl={6} className="text-center">
+              <Card className="border border-primary shadow-sm p-3 bg-white">
+                <h6 className="fw-bold text-primary text-uppercase tracking-wider mb-3">
+                  🚀 Target Tracking Matrix
+                </h6>
+
+                <div className="d-inline-block p-2 bg-light rounded border mx-auto">
+                  {/* Dynamic Matrix Column Headers */}
+                  <div className="d-flex align-items-center justify-content-center mb-1">
+                    <div
+                      style={{ width: "24px", height: "24px" }}
+                      className="me-1"
+                    ></div>
+                    {gridRange.map((col) => (
+                      <div
+                        key={`target-col-${col}`}
+                        className="text-center font-monospace small fw-bold text-muted"
+                        style={{
+                          width: "28px",
+                          height: "28px",
+                          lineHeight: "28px",
+                        }}
+                      >
+                        {col + 1}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Dynamic Matrix Rows */}
+                  {gridRange.map((row) => (
+                    <div
+                      key={`target-row-${row}`}
+                      className="d-flex align-items-center justify-content-center mb-1"
+                    >
+                      {/* Row Alphabet Index Label */}
+                      <div
+                        className="font-monospace small fw-bold text-muted text-center me-1"
+                        style={{
+                          width: "24px",
+                          height: "28px",
+                          lineHeight: "28px",
+                        }}
+                      >
+                        {rowLabels[row] || row}
+                      </div>
+
+                      {/* Fire Control Targeting Cells */}
+                      {gridRange.map((col) => (
+                        <button
+                          key={`cell-target-${row}-${col}`}
+                          className="border border-primary-subtle rounded btn-outline-primary me-1 transition-all d-block p-0 bg-white"
+                          style={{
+                            width: "28px",
+                            height: "28px",
+                            cursor: "crosshair",
+                          }}
+                          onClick={() =>
+                            alert(
+                              `Target locked! Firing coordinate stream at: ${rowLabels[row]}${col + 1}`,
+                            )
+                          }
+                          title={`Target Lock: ${rowLabels[row]}${col + 1}`}
+                        />
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            </Col>
+          </Row>
         </Container>
       );
     }
